@@ -62,6 +62,13 @@ stdenv.mkDerivation {
     runHook postInstall
   '';
 
+  # rustfmt is nightly-built while rustc/cargo are beta; its
+  # librustc_driver-*.so isn't in this bundle and never will be found.
+  # Not needed to build rust-mos (only `x fmt` uses it) - skip patching it.
+  autoPatchelfIgnoreMissingDeps = lib.optionals stdenv.hostPlatform.isLinux [
+    "librustc_driver-0f916e861b45e5f3.so"
+  ];
+
   # The bundled beta binaries are already stripped; don't let fixup touch
   # LLVM's bitcode-bearing rlibs.
   dontStrip = true;
