@@ -1,0 +1,11 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2021"
+description = "Repo tasks (cargo xtask): prefetch-hashes pins the PREFETCH placeholders in toolchain/pins.nix"
+
+# Deliberately dependency-free: the audit surface is src/main.rs alone.
+[dependencies]
+
+# Standalone crate; never part of any workspace.
+[workspace]

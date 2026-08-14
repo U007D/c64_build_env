@@ -1,0 +1,20 @@
+[package]
+name = "c64_dev_env"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+c64_pac = { git = "https://github.com/u007d/c64_pac", version = "0.1.0", features = ["critical-section"] }
+critical-section = { version = "1" }
+ufmt-stdio = "0.4.0"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+panic = "abort"
+# Suppress linker warning
+strip = true
+
+[profile.dev]
+opt-level = 2
+lto = "thin"

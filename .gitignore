@@ -1,0 +1,7 @@
+result
+result-*
+# nix build GC-root symlinks the publish-toolchain-binaries xtask drops in toolchain/
+toolchain/gcroot-*
+target/
+*.bak
+**/.idea

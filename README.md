@@ -1,0 +1,104 @@
+# `c64_dev_env`
+A no-nonsense, let-me-get-to-it development environment for Rust targeting the Commodore 64 and 
+other 6502-based targets.
+
+# AI Policy: RDT/c
+* AI was used for Research, Data and Tooling for this project.
+* All source code from this crate present in the release binary was written by humans.
+
+## Quick Start
+1. `git clone https://github.com/u007d/c64_build_env`
+2. `cd c64_build_env`
+3. `nix develop` # or `nix develop -c <your preferred shell>`
+4. Answer the Y/N questions.  You may download the toolchain binaries instead of building from
+   scratch, depending on whether binary images for your platform have been made available.  As of
+   the time of this writing, only Apple silicon images are available for download.
+5. Wait while `nix` builds/downloads your 6502-specific compiler toolchain.
+6. `cargo xinitenv` # initialize the build environment, install dependencies, emulator
+7. `cargo xrun`
+8. A Commodore 64 "Hello, 16-bit world, from Rust!" application will run and appear in an emulator.
+9. Happy programming!
+
+Note all documented C64 registers are defined in a Peripheral Access Crate (PAC)--a hierarchy of 
+modules found starting at `src/c64_pac.rs`.
+The register/field names in the PAC are consistent with *Compute!'s Mapping the C64*.  An online 
+text version of this book can be found at https://github.com/mist64/c64ref and a `.pdf` version can 
+be found at https://archive.org/details/Compute_s_Mapping_the_64_and_64C.
+
+## Background
+A few years ago, I discovered [`rust_mos`](https://github.com/mrk-its/rust-mos) and was fascinated 
+by the idea that I could run Rust on my first computer, a Commodore 64.  Much gnashing of teeth 
+ensued as I build not only `rust-mos` but also the required `llvm-mos` and `llvm-mos-sdk` from 
+source.
+
+These projects would not build well on macOS, were sensitive to the exact commits of each of the 
+projects and took several hours for each attempt.  I had a moment of success but was unable to get
+a successful build thereafter for a few years.  The creator `mrk-its` does publish a `rust-mos`
+container, but I don't really love containers and preferred a truly local build.
+
+Fast-forward to this month when I finally gave in and used `podman` to set up an environment where
+I could build for the C64 again in order to do a presentation to the Seattle Rust User Group (SRUG)
+on the topic.  Afterward a SRUG member showed me his brilliant idea of using `nix` instead of 
+`podman` to create the environment.
+
+I loved his idea of using a deterministic build system--why hadn't I thought of that?? :)
+So here it is.  This development environment is configured to build the latest (as of this writing)
+version of `rust-mos`, deterministically, along with its dependencies, principally `llvm-mos` and
+`llvm-mos-sdk`.
+
+If cached binary images of the build tools are available, the environment will offer to pull them
+down from `cachix`, rather than build locally--it's your choice.  The builds can be rather lengthy
+depending on your hardware--from 20 mins to a few hours.  I have pushed Apple silicon images to
+the cache, so if you are on macOS with M1+ hardware, you do not need to build from source.
+
+Next, I compiled one of the demo apps I build for the SRUG presentation (it's a whopping 86 bytes,
+compiled).  I was defining particular memory addresses as `const BORDER_COLOR: usize = 0xd020`,
+and used these names to read the joystick and affect the screen to demonstrate control.  But I
+wanted to do the same thing using proper, type-safe `embedded-hal` hardware registers.  So,
+working with Claude, I carefully constructed a `c64.svd` file as if coming from a silicon 
+vendor, defining all the documented registers and fields, giving them consistent naming, 
+identifying when writing fields had side-effects that were surprising, and splitting such 
+registers into read (`_R`) and write (`_W`) distinct types to minimize surprising behavior.
+
+The `.svd` file weighs in at ~100KB of XML.  The tool `svd2rust` reads the `.svd` converting the
+XML into typesafe register definitions for Rust known as a peripheral access crate or PAC, and the
+`form` tool breaks up the ~500KB PAC file into a module hierarchy.  I've also published the PAC 
+separately to `https://github.com/u007d/c64_pac` for separate use under permissive open source 
+license.
+
+You can see the PAC hierarchy and definitions from `src/c64_pac.rs` in this crate.
+
+When the naive demo program
+```rust
+<coming soon>
+```
+compiles to 86 bytes
+
+is adapted to use the typesafe zero-runtime overhead (ZRO) abstractions of the PAC, I was curious
+to find out if zero really meant zero.  Spoiler: Yes.  Yes, it does:
+```rust
+<coming soon>
+```
+compiles to... 153 bytes (!)
+
+I can hear you thinking "Hold up, I thought you said all this abstraction was ZRO!!"
+
+Let me explain.  While a 153-byte binary is tiny, it's bigger than an 86-byte binary.  So what's
+happening?
+
+# Zero Runtime Overhead
+ZRO doesn't mean a feature takes zero bytes.  It means theres an abstraction (usually to make
+the user experience easier, more readable, safer in terms of correctness guarantees or even all
+of the above.  That's the case here.
+
+It turns out that the PAC defines a `bool` as a static to ensure hardware resources can be
+strictly owned, shared and mutated according to the normal rules of the borrow checker.  That bit
+requires 1 byte of storage.  That byte of storage is called uninitialized storage (known as `.bss`
+for block static storage or originally block storage start) which *must* be zeroed out before it
+can be used--this is a guarantee provided by the C standard.  So Rust, which contrary to popular
+belief, has a runtime--it's C's runtime (calld `crt0` or C runtime zero) which copies zeroes to all
+`.bss` memory (of which we have only 1 byte).  This copy function, because it gets used, doesn't
+get eliminated by the linker during compilation.  It's a one-time cost, but has nothing at all to
+do with the PAC.  Use (`unsafe`) `Peripheral::steal()` instead of (safe) `Peripheral::take()` and
+there's not static `bool`.  500KB PAC and all its abstractions in this demo code evaporate down 
+to... you guess it: exactly the same 86 bytes.

@@ -1,0 +1,36 @@
+# This crate is BOTH the repo root and the C64 game. cargo discovers
+# `.cargo/config.toml` by walking up from the cwd, so a `[build] target` here
+# would also apply to the host tool `xtask` (nested at ./xtask) and break
+# `cargo xtask` (you can't build a std host tool for bare-metal mos). So we set
+# NO default target and NO build-std here. The C64 cross-compile flags are passed
+# explicitly by the xtask build/run/check/asm commands instead (see xtask/src).
+#
+# Consequence: plain `cargo build` targets the HOST. Build the game for the C64
+# with `cargo xbuild` (or `cargo xtask build`); run it with `cargo xrun`.
+[alias]
+# The cargo-xtask pattern (https://github.com/matklad/cargo-xtask): repo
+# automation lives in a plain Rust bin, invoked through this alias. With no
+# `[build] target` above, this correctly builds xtask for the host.
+xtask = "run --manifest-path xtask/Cargo.toml --"
+# `initenv` idempotently builds the llvm-mos compiler, llvm-sdk and rust-mos so
+# you have a toolchain capable of targeting the C64. Run once; see README.md.
+xinitenv = "xtask initenv"
+# `publish-toolchain-binaries` builds the toolchain outputs and pushes them to a
+# Cachix cache so others download instead of rebuilding (cache-owner, one-time).
+xpublish-toolchain-binaries = "xtask publish-toolchain-binaries"
+
+# The C64 build/run/check/asm commands (`cargo xbuild`, `cargo xrun`,
+# `cargo xcheck`, `cargo xasm`) are NOT cargo aliases: the dev shell puts
+# `cargo-x*` binaries on PATH (see flake.nix) so they work from any crate
+# directory, and each shells out to cargo with the mos `--target` + `-Zbuild-std`
+# flags spelled out explicitly (so nothing mos-flavored is inherited from this
+# config). The `cargo xtask build/run/check/asm` alias forms work from the repo
+# root too.
+
+# mos-c64-none runner: launches the built PRG in VICE for `cargo xrun` (and any
+# `cargo run --target mos-c64-none`). A runner keyed to the mos triple is inert
+# for host builds, so it is safe to keep here. x64sc is VICE's cycle-exact C64
+# binary; `-autostart` loads and runs the PRG cargo passes last; `-loglimit 0`
+# silences VICE's noisy startup log.
+[target.mos-c64-none]
+runner = ["x64sc", "-loglimit", "0", "-autostart"]
