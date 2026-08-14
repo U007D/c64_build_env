@@ -40,6 +40,10 @@ stdenv.mkDerivation {
 
   src = rust-mos-src;
 
+  env = {
+    LIBZ_SYS_STATIC = "1";
+  };
+
   nativeBuildInputs = [
     python3
     cmake # libgit2-sys (forked cargo build)
