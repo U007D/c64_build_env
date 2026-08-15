@@ -7,8 +7,8 @@ other 6502-based targets.
 * All source code from this crate present in the release binary was written by humans.
 
 ## Quick Start
-1. `git clone https://github.com/u007d/c64_build_env`
-2. `cd c64_build_env`
+1. `git clone https://github.com/u007d/rust-mos-env`
+2. `cd rust-mos-env`
 3. `nix develop` # or `nix develop -c <your preferred shell>`
 4. Answer the Y/N questions.  You may download the toolchain binaries instead of building from
    scratch, depending on whether binary images for your platform have been made available.  As of

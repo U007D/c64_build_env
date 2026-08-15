@@ -1,5 +1,5 @@
 [package]
-name = "c64_dev_env"
+name = "rust-mos-env"
 version = "0.1.0"
 edition = "2024"
 
