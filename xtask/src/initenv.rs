@@ -212,7 +212,7 @@ fn init_buildenv_inner(args: &[String]) -> Result<(), String> {
     println!("Next:");
     println!("  restart your shell (the nix profile isn't on this process's PATH yet)");
     println!("  nix develop        # rust-mos rustc + its cargo + SDK on PATH");
-    println!("  cd c64/examples/hello-world && cargo build --release   # target comes from .cargo/config.toml");
+    println!("  cd bin/hello_world && cargo xrun   # build the example and launch VICE");
     Ok(())
 }
 

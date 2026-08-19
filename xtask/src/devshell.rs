@@ -41,36 +41,50 @@ pub(crate) fn check() -> Result<(), String> {
     // Locate the flake by walking up from the cwd, not from this binary: the
     // cargo-x* shims are built into the nix store, so CARGO_MANIFEST_DIR would
     // point there rather than at the repo.
-    let Some(dir) = find_flake_dir() else {
+    //
+    // Every ancestor, not just the nearest: a project under `bin/` is often an
+    // ex-standalone repo that still carries its own `flake.nix`. That flake did
+    // not build this shell, so hashing the nearest one mismatches the stamp on
+    // every single invocation from inside the project. A match anywhere up the
+    // chain means the shell does correspond to a flake we are sitting under,
+    // which is all this check is asking.
+    let dirs = flake_dirs();
+    let Some(root) = dirs.last() else {
         return Ok(()); // not under a flake; nothing to compare against
     };
-    let Some(current) = stamp_for(&dir) else {
-        return Ok(()); // hashing failed; stay quiet rather than cry wolf
-    };
-
-    if current != stamp {
-        eprintln!(
-            "warning: this `nix develop` shell predates the current flake \
-             ({}/flake.nix changed since it started).",
-            dir.display()
-        );
-        eprintln!(
-            "         Its RUST_TARGET_PATH/PATH are stale — exit and re-enter `nix develop` \
-             if something is unexpectedly missing."
-        );
+    if dirs.iter().filter_map(|d| stamp_for(d)).any(|s| s == stamp) {
+        return Ok(());
     }
+    if stamp_for(root).is_none() {
+        return Ok(()); // hashing failed; stay quiet rather than cry wolf
+    }
+
+    // Nothing matched. Name the outermost flake: a project's own flake nests
+    // under the environment's, so the outermost is the one that built the shell.
+    eprintln!(
+        "warning: this `nix develop` shell predates the current flake \
+         ({}/flake.nix changed since it started).",
+        root.display()
+    );
+    eprintln!(
+        "         Its RUST_TARGET_PATH/PATH are stale — exit and re-enter `nix develop` \
+         if something is unexpectedly missing."
+    );
     Ok(())
 }
 
-/// Nearest ancestor of the cwd containing a `flake.nix`.
-fn find_flake_dir() -> Option<PathBuf> {
-    let mut dir = std::env::current_dir().ok()?;
+/// Every ancestor of the cwd containing a `flake.nix`, nearest first.
+fn flake_dirs() -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    let Ok(mut dir) = std::env::current_dir() else {
+        return found;
+    };
     loop {
         if dir.join("flake.nix").is_file() {
-            return Some(dir);
+            found.push(dir.clone());
         }
         if !dir.pop() {
-            return None;
+            return found;
         }
     }
 }

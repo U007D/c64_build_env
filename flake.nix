@@ -40,6 +40,7 @@
             rust-mos-src = call ./toolchain/rust-mos-src.nix { };
             rust-mos = call ./toolchain/rust-mos.nix { };
             check-vendor = call ./toolchain/check-vendor.nix { };
+            example-vendor = call ./toolchain/example-vendor.nix { };
             # LGB's Xemu (xmega65) — the MEGA65 emulator behind `cargo xrun_mega65`.
             # Built from source because neither nixpkgs nor Homebrew packages it
             # (both ship an unrelated Xbox emulator under the name `xemu`).
@@ -65,6 +66,7 @@
           stage0 = toolchain.rust-mos-stage0;
           rust-mos-src = toolchain.rust-mos-src;
           check-vendor = toolchain.check-vendor;
+          example-vendor = toolchain.example-vendor;
           llvm-mos-source = toolchain.llvm-mos.src;
           llvm-mos-sdk-source = toolchain.llvm-mos-sdk.src;
         }
@@ -76,8 +78,14 @@
           p = self.packages.${pkgs.stdenv.hostPlatform.system};
         in
         {
-          c64-hello-world = pkgs.callPackage ./c64/check.nix {
-            inherit (p) rust-mos rust-mos-src mos-toolchain check-vendor;
+          c64-hello-world = pkgs.callPackage ./check.nix {
+            inherit (p)
+              rust-mos
+              rust-mos-src
+              mos-toolchain
+              check-vendor
+              example-vendor
+              ;
           };
         }
       );

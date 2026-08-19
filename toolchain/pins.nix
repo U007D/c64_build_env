@@ -52,6 +52,9 @@
   # Custom fixed-output derivations (source + cargo-vendor trees).
   rust-mos-src-hash = "sha256-On4Cx1/jW2k2td3WkcaiuSW58lklGIKh2Hl6/2OY7nA="; # PREFETCH:rust-mos-src
   check-vendor-hash = "sha256-0KIMgA4ggflOXDR9zy3sZuOfKDlaVOjnOpopsGQq3LE="; # PREFETCH:check-vendor
+  # bin/hello_world's own dependencies, for the offline check. Depends on the
+  # example's manifests and Cargo.lock, so re-pin when its dependencies change.
+  example-vendor-hash = "sha256-iMcUp4yVrHXCUMjNlNcgG16H7Atg+d5k/p+l9XOBj6U="; # PREFETCH:example-vendor
 
   # Stage0 bootstrap: pinned by rust-mos' own src/stage0 at 8f3a80f8
   # (compiler_date=2025-02-18, compiler_version=beta => 1.85.0-beta).

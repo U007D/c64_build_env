@@ -1,15 +1,28 @@
-[package]
-name = "rust-mos-env"
-version = "0.1.2"
-edition = "2024"
+# The repo root is a virtual workspace: no package of its own, one member per
+# binary project under `bin/`. To add a project, copy `bin/hello_world` to
+# `bin/<project>` and rename the package — the glob picks the new directory up.
+# `.gitignore` keeps every `bin/` project but `hello_world` out of this repo.
+#
+# `xtask` is absent by design: xtask/Cargo.toml declares its own `[workspace]`,
+# keeping the host tool and its lockfile separate.
+[workspace]
+resolver = "3"
+members = ["bin/*"]
 
-[dependencies]
-c64_pac = { git = "https://github.com/u007d/c64_pac", version = "0.1.0", features = ["critical-section"] }
-critical-section = { version = "1" }
-ufmt-stdio = "0.4.0"
+# rust-mos-env's own version — the environment: toolchain pins, flake, xtask and
+# the project scaffolding. It moved here when the root stopped being a package.
+# Projects under `bin/` version themselves; nothing inherits this by default.
+[workspace.package]
+version = "0.1.3"
 
+# Cargo honours `[profile]` only in the workspace root, so these settings apply
+# to every `bin/` project.
 [profile.release]
 opt-level = 3
+# Load-bearing, not a size tweak: fat LTO defers dependency codegen to the link,
+# where dead code is dropped first. Without it llvm-mos aborts legalizing the
+# 128-bit remainder in `core::fmt::num::exp_u128` — a function no 6502 program
+# calls, but one that eager codegen still hands to the backend.
 lto = "fat"
 panic = "abort"
 # Suppress linker warning
@@ -18,3 +31,13 @@ strip = true
 [profile.dev]
 opt-level = 2
 lto = "thin"
+# Also on the host: a no_std project with its own panic handler cannot unwind, so
+# a host build fails without this — and cargo reprints a build script's warnings
+# when the build fails, doubling the one build.rs emits.
+panic = "abort"
+
+# No overflow-checks override here, deliberately: dev overflow checks crash the
+# 45GS02 backend, but a `[profile]` cannot be conditioned on the target, and
+# disabling them repo-wide would cost the C64 and host builds a check they have
+# no problem with. The MEGA65 workaround rides on `--target mega65` instead —
+# see Target::cargo_flags in xtask/src/target.rs.

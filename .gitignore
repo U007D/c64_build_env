@@ -1,3 +1,15 @@
+# Binary projects live in bin/. This repo is the build environment, so the only
+# one it ever carries is the bundled hello_world example: everything else under
+# bin/ is ignored, and your own projects can sit right here — workspace members,
+# built by the same `cargo x*` commands — without ever showing up in
+# `git status`, a `git add -A`, or a PR against rust-mos-env. Keep them in their
+# own repo (a nested git repo under bin/ works fine) or a directory of your own.
+#
+# `/bin/*` ignores each entry rather than `/bin/` itself, so git can still
+# descend into the one directory the next line un-ignores.
+/bin/*
+!/bin/hello_world/
+
 result
 result-*
 # nix build GC-root symlinks the publish-toolchain-binaries xtask drops in toolchain/

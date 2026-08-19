@@ -1,4 +1,4 @@
-# `c64_dev_env`
+# `rust-mos-env`
 A no-nonsense, let-me-get-to-it development environment for Rust targeting the Commodore 64 and 
 other 6502-based targets.
 
@@ -15,9 +15,58 @@ other 6502-based targets.
    the time of this writing, only Apple silicon images are available for download.
 5. Wait while `nix` builds/downloads your 6502-specific compiler toolchain.
 6. `cargo xinitenv` # initialize the build environment, install dependencies, emulator
-7. `cargo xrun`
+7. `cd bin/hello_world && cargo xrun`
 8. A Commodore 64 "Hello, 16-bit world, from Rust!" application will run and appear in an emulator.
 9. Happy programming!
+
+## Your projects: `bin/`
+
+Every binary project is its own crate under `bin/`, and the repo root is the workspace that holds
+them. The bundled example is `bin/hello_world`; to start a project of your own, copy it:
+
+```sh
+cp -r bin/hello_world bin/my_game     # then rename the package in bin/my_game/Cargo.toml
+```
+
+Run the build commands from inside a project to act on that project, or name the project from
+anywhere else:
+
+```sh
+cd bin/hello_world && cargo xrun      # from this project's folder OR
+cargo xrun --bin hello_world          # from anywhere in the repo
+```
+
+`nix develop` also works from anywhere in the repo: nix walks up to the flake at the root. (If
+your nix is old enough to answer "does not contain a 'flake.nix'", run `nix develop` from the
+root instead.)
+
+**Your projects stay yours.** `.gitignore` ignores everything under `bin/` except `hello_world`,
+so `rust-mos-env` never carries binary code but the example — your projects can live here, built
+by the same commands, without appearing in `git status` or in a PR against this repo. Keep each
+project in a repo of its own (a nested git repo under `bin/` is fine).
+
+A project pins symbols to fixed addresses — a character set the VIC-II can see, sprite data,
+music — through its own `memory.x` linker script, which `build.rs` hands to the linker. It is
+optional, and `hello_world` has none: until something must live at a particular address, the
+SDK's own layout is enough. Copy `bin/hello_world/memory.x.example` to `memory.x` in your project
+when that day comes; the file documents both machines' memory maps.
+
+The release and dev profiles live in the root `Cargo.toml` — cargo honours `[profile]` only in
+the workspace root — and apply to every project.
+
+**Moving an existing project in.** The glob `members = ["bin/*"]` picks up a new directory on its
+own, so nothing in `rust-mos-env` needs editing. A project that used to be its own repo root does
+carry files that were meaningful there and are not here; drop them as you move it in:
+
+| Leftover | Why it goes |
+| --- | --- |
+| `[profile.*]` in `Cargo.toml` | Ignored in a member, and cargo prints a warning for it on *every* build of *any* project. The root's profiles apply instead. |
+| `.cargo/config.toml` with `[build] target` / `[unstable] build-std` | Cargo merges configs from the cwd upward, so this leaks into anything run from inside the project — including `cargo xtask`, which must build for the host. The `cargo x*` commands pass the cross-compile flags explicitly, so it buys nothing. |
+| `Cargo.lock` | Only the workspace root's lockfile is used. |
+| `flake.nix` / `xtask/` / `targets/` | Superseded by this repo's. A nested `flake.nix` is otherwise harmless. |
+
+Everything else — `src/`, `build.rs`, `memory.x`, `README.md`, its own `.git` — comes across
+unchanged.
 
 ## Targets: `c64` and `mega65`
 
@@ -34,10 +83,13 @@ cargo xrun_mega65            # build + launch Xemu
 have different CPUs, linkers, and emulators. Calling `cargo xtask build` with no (or an unknown)
 target prints the valid list.
 
-The MEGA65 target is `targets/mos-mega65-none.json` — the dev shell appends it to
-`RUST_TARGET_PATH`. Nix flakes only see git-tracked files, so it must stay committed. Linker
-scripts are per-machine too: `build.rs` picks `memory-c64.x` or `memory-mega65.x` from the target
-vendor, because a MEGA65 PRG loads at `$2001` and collides with anything the C64 pins at `$2000`.
+The MEGA65 target is `targets/mos-mega65-none.json` — the dev shell appends the `targets/`
+directory to `RUST_TARGET_PATH`. Nix flakes only see git-tracked files, so `mos-mega65-none.json`
+must stay committed.
+
+Fixed addresses in a project's `memory.x` are machine-specific — a MEGA65 PRG loads at `$2001`,
+inside the range a C64 program can pin data at — so a project targeting both machines must place
+sections where both maps agree. `bin/hello_world/memory.x.example` documents both maps.
 
 ### MEGA65 ROM
 
@@ -64,7 +116,8 @@ to fall back to the Cloanto one. Verify with Xemu's log: `Closed-ROMs detected w
 920422` means you have the enhanced ROM, `910814` means you do not.
 
 Note all documented C64 registers are defined in a Peripheral Access Crate (PAC)--a hierarchy of 
-modules found starting at `src/c64_pac.rs`.
+modules in the `c64_pac` crate (https://github.com/u007d/c64_pac), which `bin/hello_world` depends 
+on.
 The register/field names in the PAC are consistent with *Compute!'s Mapping the C64*.  An online 
 text version of this book can be found at https://github.com/mist64/c64ref and a `.pdf` version can 
 be found at https://archive.org/details/Compute_s_Mapping_the_64_and_64C.
@@ -110,7 +163,7 @@ XML into typesafe register definitions for Rust known as a peripheral access cra
 separately to `https://github.com/u007d/c64_pac` for separate use under permissive open source 
 license.
 
-You can see the PAC hierarchy and definitions from `src/c64_pac.rs` in this crate.
+You can see the PAC hierarchy and definitions in the `c64_pac` crate linked above.
 
 When the naive demo program
 ```rust

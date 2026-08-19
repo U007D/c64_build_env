@@ -58,12 +58,37 @@ impl Target {
     /// break `cargo xtask`. `-Zbuild-std` needs the forked nightly cargo, so
     /// these commands must run inside `nix develop`.
     pub(crate) fn cargo_flags(self) -> Vec<String> {
-        vec![
+        let mut flags = vec![
             "--target".to_string(),
             self.triple().to_string(),
             "-Zbuild-std=core,alloc".to_string(),
             "-Zbuild-std-features=panic_immediate_abort".to_string(),
-        ]
+        ];
+        flags.extend(self.workarounds());
+        flags
+    }
+
+    /// Per-machine workarounds for toolchain bugs, as `--config` overrides.
+    ///
+    /// The MEGA65 entry: cargo turns overflow checks on in the dev profile, and
+    /// the checked-arithmetic branches they insert defeat the 45GS02 register
+    /// allocator — rustc dies with a SIGSEGV inside LLVM's RAGreedy compiling
+    /// core and compiler_builtins for mos-mega65-none, whatever the opt-level
+    /// and LTO setting. Scoping the override to dependencies leaves your own
+    /// code checked, and passing it here rather than in the workspace
+    /// `[profile]` leaves the C64 and host builds checked too — a `[profile]`
+    /// cannot be conditioned on the target, and only the 45GS02 has this bug.
+    ///
+    /// Each workaround has a probe in check.nix that fails the flake check once
+    /// the bug is fixed upstream, naming what to delete.
+    fn workarounds(self) -> Vec<String> {
+        match self {
+            Self::C64 => vec![],
+            Self::Mega65 => vec![
+                "--config".to_string(),
+                r#"profile.dev.package."*".overflow-checks=false"#.to_string(),
+            ],
+        }
     }
 }
 
@@ -176,5 +201,17 @@ mod tests {
     fn cargo_flags_name_the_triple() {
         assert!(Target::C64.cargo_flags().contains(&"mos-c64-none".to_string()));
         assert!(Target::Mega65.cargo_flags().contains(&"mos-mega65-none".to_string()));
+    }
+
+    #[test]
+    fn only_mega65_disables_dependency_overflow_checks() {
+        let has_override = |t: Target| {
+            t.cargo_flags()
+                .iter()
+                .any(|f| f.contains("overflow-checks=false"))
+        };
+        assert!(has_override(Target::Mega65));
+        // The C64 backend has no such bug, so its builds keep the checks.
+        assert!(!has_override(Target::C64));
     }
 }

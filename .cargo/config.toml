@@ -1,12 +1,11 @@
-# This crate is BOTH the repo root and the C64 game. cargo discovers
-# `.cargo/config.toml` by walking up from the cwd, so a `[build] target` here
-# would also apply to the host tool `xtask` (nested at ./xtask) and break
-# `cargo xtask` (you can't build a std host tool for bare-metal mos). So we set
-# NO default target and NO build-std here. The C64 cross-compile flags are passed
-# explicitly by the xtask build/run/check/asm commands instead (see xtask/src).
+# cargo discovers `.cargo/config.toml` by walking up from the cwd, so this file
+# covers the `bin/` projects AND the host tool `xtask`. A `[build] target` here
+# would break the latter (you can't build a std host tool for bare-metal mos), so
+# we set NO default target and NO build-std; the xtask build/run/check/asm
+# commands pass the cross-compile flags explicitly instead (see xtask/src).
 #
-# Consequence: plain `cargo build` targets the HOST. Build the game for the C64
-# with `cargo xbuild` (or `cargo xtask build`); run it with `cargo xrun`.
+# Consequence: plain `cargo build` targets the HOST. Build a bin/ project for the
+# C64 with `cargo xbuild` (or `cargo xtask build`); run it with `cargo xrun`.
 [alias]
 # The cargo-xtask pattern (https://github.com/matklad/cargo-xtask): repo
 # automation lives in a plain Rust bin, invoked through this alias. With no
@@ -26,6 +25,10 @@ xpublish-toolchain-binaries = "xtask publish-toolchain-binaries"
 # flags spelled out explicitly (so nothing mos-flavored is inherited from this
 # config). They default to `--target c64`. The `cargo xtask build/run/check/asm`
 # alias forms work from the repo root too.
+#
+# Package selection follows cargo's rules: a `cargo x*` command run from
+# `bin/<project>` selects that project. Outside of any project directory, the
+# `--bin <project>` argument is required: `cargo xrun --bin hello_world`.
 #
 # Defining a bare `xbuild`/`xrun`/… alias here as well would shadow that shim,
 # which cargo warns about today and will reject in a future release.
