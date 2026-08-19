@@ -1,0 +1,19 @@
+# The bundled example, and the template for a new project: copy this directory
+# to `bin/<project>` and rename the package below. The package name is also the
+# binary name, so `cargo xrun --bin hello_world` selects this project.
+[package]
+name = "hello_world"
+version = "0.1.2"
+edition = "2024"
+# Hands this project's memory.x to the linker if it has one — this project does
+# not, see memory.x.example — and warns when a plain cargo command builds for
+# the host.
+build = "build.rs"
+
+[dependencies]
+c64_pac = { git = "https://github.com/u007d/c64_pac", version = "0.3.1", features = ["critical-section"] }
+critical-section = { version = "1" }
+ufmt-stdio = "0.4.0"
+
+# `[profile]` settings live in the root workspace Cargo.toml; cargo ignores a
+# member's copy.

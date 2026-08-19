@@ -12,10 +12,14 @@
 # substitutes the reported hashes in place).
 {
   rust-mos = {
-    owner = "mrk-its";
+    owner = "u007d"; # fork of mrk-its/rust-mos carrying the MOS inline-asm work
     repo = "rust-mos";
-    # tip of branch mos_rustc_1.87, "cmp fix", 2025-03-08; src/version = 1.87.0
-    rev = "8f3a80f87cea2bd236d953027cb5bce9dfc63b89";
+    # tip of branch mos-inline-asm, "add mos inline assembly targets (nightly)":
+    # mos_rustc_1.87 tip 8f3a80f8 ("cmp fix", 2025-03-08) plus InlineAsmArch::Mos
+    # and compiler/rustc_target/src/asm/mos.rs, which together make `asm!` and
+    # `global_asm!` usable on mos under #![feature(asm_experimental_arch)].
+    # src/version = 1.87.0
+    rev = "acfed6018885868d6db986c84be9162b527fc1d0";
     version = "1.87.0-dev";
   };
 
@@ -50,8 +54,11 @@
   compiler-builtins-150-rev = "090b8f3cfdbf95afe7fda4fa2d9c99cc5ed1a69c";
 
   # Custom fixed-output derivations (source + cargo-vendor trees).
-  rust-mos-src-hash = "sha256-On4Cx1/jW2k2td3WkcaiuSW58lklGIKh2Hl6/2OY7nA="; # PREFETCH:rust-mos-src
+  rust-mos-src-hash = "sha256-DDuXHen5pPtcfq0nlX6u07BxRHTisuMpsKDXUGH4j2w="; # PREFETCH:rust-mos-src
   check-vendor-hash = "sha256-0KIMgA4ggflOXDR9zy3sZuOfKDlaVOjnOpopsGQq3LE="; # PREFETCH:check-vendor
+  # bin/hello_world's own dependencies, for the offline check. Depends on the
+  # example's manifests and Cargo.lock, so re-pin when its dependencies change.
+  example-vendor-hash = "sha256-iMcUp4yVrHXCUMjNlNcgG16H7Atg+d5k/p+l9XOBj6U="; # PREFETCH:example-vendor
 
   # Stage0 bootstrap: pinned by rust-mos' own src/stage0 at 8f3a80f8
   # (compiler_date=2025-02-18, compiler_version=beta => 1.85.0-beta).

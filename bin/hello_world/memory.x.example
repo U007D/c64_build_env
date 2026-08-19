@@ -1,0 +1,41 @@
+/* A linker script template. INERT AS NAMED: build.rs looks for `memory.x`, so
+ * copy this file to `memory.x` beside your Cargo.toml to put it to work.
+ *
+ * You need one as soon as a symbol must live at a fixed address — a character
+ * set the VIC-II can see, sprite data, music. Until then the SDK's own script
+ * lays out a working program, which is why hello_world ships without a
+ * memory.x: nothing in it cares where the linker puts anything.
+ *
+ * `INCLUDE link.ld` pulls in the llvm-mos SDK script for whichever machine is
+ * being built, so the SECTIONS block below is the only part your project owns.
+ * Fixed addresses in it are machine-specific, hence the two maps; a project
+ * targeting one machine can delete the other.
+ *
+ * C64 (mos-c64-none): the PRG loads at $0801, so fixed placements must sit
+ * above the BASIC header the SDK emits there. $2000 is the VIC-II character
+ * base — the VIC-II sees only 16K at a time and reads character data at a fixed
+ * offset in that bank, so it is a hardware constraint. $c000 is ordinary RAM.
+ *
+ * MEGA65 (mos-mega65-none): bank 0, linker region $2001-$cfff, soft stack from
+ * $d000 growing down.
+ *   $2001-$9fff  free RAM — the program loads at $2001
+ *   $a000-$bfff  BASIC ROM, switched to RAM by the SDK's unmap-basic
+ *   $c000-$cfff  free RAM
+ *   $d000-$dfff  I/O
+ *   $e000-$ffff  KERNAL
+ */
+
+INCLUDE link.ld
+
+SECTIONS {
+  # Specify section symbols here, e.g.
+  # // in your Rust code:
+  # #[unsafe(no_mangle)]
+  # #[unsafe(link_section = ".my_data")]
+  # pub static MY_DATA: [u8; MY_DATA_SIZE] = *include_bytes!("../data/my_data.bin");
+
+  # Uncomment below and change symbol names to match your code. Omitting the
+  # address lets the linker place the section.
+  # .my_data    0x2000 : { KEEP(*(.my_data))  }
+  # .my_data_2  0xc000 : { KEEP(*(.my_data_2))  }
+} INSERT AFTER .data;

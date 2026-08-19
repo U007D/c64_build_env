@@ -21,11 +21,12 @@ needs network; idempotent). Run once, on a machine with network access.
 /// Flake attributes to prefetch, cheap source fetches first, then the
 /// expensive vendor FODs. Each must have a matching `# PREFETCH:<name>`
 /// marker in toolchain/pins.nix.
-const TARGETS: [&str; 4] = [
+const TARGETS: [&str; 5] = [
     "llvm-mos-source",
     "llvm-mos-sdk-source",
     "rust-mos-src",
     "check-vendor",
+    "example-vendor",
 ];
 
 /// `lib.fakeHash`: what an unpinned entry looks like, byte for byte.

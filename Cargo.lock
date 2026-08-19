@@ -10,8 +10,8 @@ checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
 name = "c64_pac"
-version = "0.1.0"
-source = "git+https://github.com/u007d/c64_pac#fcef2a9fae635035816ce2e209f3795362d12f62"
+version = "0.3.1"
+source = "git+https://github.com/u007d/c64_pac#ef577b796c82437ef976c5afc76005a9dca4a641"
 dependencies = [
  "critical-section",
  "vcell",
@@ -30,16 +30,50 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "790eea4361631c5e7d22598ecd5723ff611904e3344ce8720784c93e3d83d40b"
 
 [[package]]
+name = "hello_world"
+version = "0.1.2"
+dependencies = [
+ "c64_pac",
+ "critical-section",
+ "ufmt-stdio",
+]
+
+[[package]]
+name = "joystick"
+version = "0.1.0"
+dependencies = [
+ "rand",
+ "ufmt-stdio",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
 
 [[package]]
+name = "maze"
+version = "0.1.0"
+dependencies = [
+ "rand",
+ "ufmt-stdio",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+
+[[package]]
+name = "outrun_petscii"
+version = "0.1.0"
+dependencies = [
+ "c64_pac",
+ "critical-section",
+ "ufmt-stdio",
+]
 
 [[package]]
 name = "proc-macro2"
@@ -60,13 +94,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust-mos-env"
-version = "0.1.2"
+name = "rand"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
 dependencies = [
- "c64_pac",
- "critical-section",
- "ufmt-stdio",
+ "rand_core",
 ]
+
+[[package]]
+name = "rand_core"
+version = "0.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 
 [[package]]
 name = "rustversion"
