@@ -30,6 +30,7 @@
   rust-mos-stage0,
   rust-mos-src,
   pins,
+  autoPatchelfHook,
 }:
 let
   triple = stdenv.hostPlatform.rust.rustcTarget;
@@ -40,17 +41,23 @@ stdenv.mkDerivation {
 
   src = rust-mos-src;
 
+  env = {
+    LIBZ_SYS_STATIC = "1";
+  };
+
   nativeBuildInputs = [
     python3
     cmake # libgit2-sys (forked cargo build)
     pkg-config
-  ];
+  ] ++ lib.optionals stdenv.hostPlatform.isLinux [ autoPatchelfHook ];
   buildInputs = [
     openssl
     zlib
     curl
+    llvm-mos
   ]
-  ++ lib.optionals stdenv.hostPlatform.isDarwin [ libiconv ];
+  ++ lib.optionals stdenv.hostPlatform.isDarwin [ libiconv ]
+  ++ lib.optionals stdenv.hostPlatform.isLinux [ stdenv.cc.cc.lib ];
 
   # Everything is pre-vendored in rust-mos-src; hard-fail on any network use.
   CARGO_NET_OFFLINE = "true";
@@ -207,6 +214,11 @@ stdenv.mkDerivation {
       mkdir -p $out/lib/rustlib/${triple}/lib
       ln -s ${llvm-mos}/lib/libLLVM.dylib $out/lib/rustlib/${triple}/lib/libLLVM.dylib
     fi
+    # Linux: rustc runs below, before fixupPhase's automatic autoPatchelf
+    # call. Run it explicitly now — resolves libLLVM, libstdc++, libssl
+    # etc. from buildInputs in one pass. fixupPhase's own call afterwards
+    # is a harmless no-op re-check.
+    ${lib.optionalString stdenv.hostPlatform.isLinux "autoPatchelf $out"}
 
     # --- rust-src for -Zbuild-std -----------------------------------------
     # Same content the docker image got from the rust-src dist tarball:
