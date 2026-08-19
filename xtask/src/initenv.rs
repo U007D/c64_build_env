@@ -174,6 +174,32 @@ fn init_buildenv_inner(args: &[String]) -> Result<(), String> {
         println!("Build environment ready (full flake check passed).");
     }
 
+    // 4b. Emulators. `cargo xrun_mega65` needs Xemu's `xmega65`, which this flake
+    //     builds from source because neither nixpkgs nor Homebrew packages it
+    //     (both ship an unrelated Xbox emulator under the name `xemu`). Neither
+    //     `nix build .#rust-mos` nor `nix flake check` reaches it, so build it
+    //     here — otherwise the cost lands on the user's first `nix develop`.
+    //     Non-fatal: a failure here still leaves a working C64 toolchain, and the
+    //     C64 path (VICE) is unaffected.
+    println!();
+    println!("Building Xemu (xmega65) for the MEGA65 target…");
+    let mut xemu_args = vec!["build", ".#xemu"];
+    xemu_args.extend_from_slice(extra);
+    match run_nix_inherit(&nix, &root, &xemu_args) {
+        Ok(true) => println!("Xemu ready (`cargo xrun_mega65`)."),
+        Ok(false) | Err(_) => {
+            eprintln!("WARNING: `nix build .#xemu` failed — the MEGA65 emulator is unavailable.");
+            eprintln!("         C64 builds and `cargo xrun` (VICE) are unaffected.");
+        }
+    }
+
+    // 4c. The C65 ROM xmega65 boots. Also non-fatal, and skipped when already
+    //     installed — the fetch is a ~268 MB installer.
+    if let Err(e) = install_mega65_rom(&nix, &root, extra) {
+        eprintln!("WARNING: MEGA65 ROM not installed: {e}");
+        eprintln!("         xmega65 still runs, but boots its stub ROM. See README (\"MEGA65 ROM\").");
+    }
+
     // 5. If we generated anything, remind the user to commit it.
     if lock_generated || hashes_filled {
         println!();
@@ -188,6 +214,130 @@ fn init_buildenv_inner(args: &[String]) -> Result<(), String> {
     println!("  nix develop        # rust-mos rustc + its cargo + SDK on PATH");
     println!("  cd c64/examples/hello-world && cargo build --release   # target comes from .cargo/config.toml");
     Ok(())
+}
+
+/// Xemu's preferences directory for the MEGA65 target — where it looks for
+/// `MEGA65.ROM` (`targets/mega65/rom.c` loads `"@MEGA65.ROM"`, `@` meaning the
+/// pref dir). This is SDL_GetPrefPath("xemu-lgb", "mega65"), whose layout is
+/// platform-defined; we reproduce the two we support.
+fn xemu_pref_dir() -> Result<PathBuf, String> {
+    let home = std::env::var_os("HOME").ok_or("HOME is not set")?;
+    let home = PathBuf::from(home);
+    Ok(if cfg!(target_os = "macos") {
+        home.join("Library/Application Support/xemu-lgb/mega65")
+    } else {
+        home.join(".local/share/xemu-lgb/mega65")
+    })
+}
+
+/// Build `.#mega65-rom` and copy it into Xemu's preferences directory.
+///
+/// The ROM is Cloanto copyright — free to download for your own use, not
+/// redistributable. It is fetched to your local /nix/store and copied to your
+/// own pref dir; it never enters this repo or any binary cache. See
+/// toolchain/mega65-rom.nix.
+fn install_mega65_rom(nix: &Path, root: &Path, extra: &[&str]) -> Result<(), String> {
+    let dest_dir = xemu_pref_dir()?;
+    let dest = dest_dir.join("MEGA65.ROM");
+    if dest.exists() {
+        match rom_version(&dest) {
+            Some(v) => println!("MEGA65 ROM already installed (version {v}): {}", dest.display()),
+            None => println!("MEGA65 ROM already installed: {}", dest.display()),
+        }
+        report_rom_capability(&dest);
+        return Ok(());
+    }
+
+    println!();
+    println!("Fetching the MEGA65 (C65 910828) ROM from Cloanto's free C64 Forever installer…");
+    println!("  ~268 MB download; the ROM is for your own use and is not redistributed.");
+    // The derivation is meta.license = unfree (the ROM is Cloanto's, free to
+    // download but not to redistribute), so nixpkgs refuses to build it unless
+    // the user opts in. Opt in explicitly here — downloading it for your own use
+    // is exactly what Cloanto permits and what Xemu's docs recommend. That in
+    // turn requires --impure, since the env var is an impurity.
+    let mut args = vec![
+        "build",
+        ".#mega65-rom",
+        "--print-out-paths",
+        "--no-link",
+        "--impure",
+    ];
+    args.extend_from_slice(extra);
+    let out = crate::nix_command(nix, root, &args)
+        .env("NIXPKGS_ALLOW_UNFREE", "1")
+        .output()
+        .map_err(|e| format!("failed to spawn `nix`: {e}"))?;
+    let mut combined = String::from_utf8_lossy(&out.stdout).into_owned();
+    combined.push_str(&String::from_utf8_lossy(&out.stderr));
+    if !out.status.success() {
+        return Err(format!(
+            "`nix build .#mega65-rom` failed (has Cloanto moved the installer? see README):\n{}",
+            combined.trim()
+        ));
+    }
+    let store_rom = PathBuf::from(String::from_utf8_lossy(&out.stdout).trim()).join("MEGA65.ROM");
+    if !store_rom.exists() {
+        return Err(format!("built, but {} is missing", store_rom.display()));
+    }
+
+    std::fs::create_dir_all(&dest_dir)
+        .map_err(|e| format!("creating {}: {e}", dest_dir.display()))?;
+    std::fs::copy(&store_rom, &dest).map_err(|e| format!("copying to {}: {e}", dest.display()))?;
+    // The store copy is read-only; make the installed one writable so Xemu's UI
+    // can replace it later without a permission error.
+    if let Ok(meta) = std::fs::metadata(&dest) {
+        let mut perms = meta.permissions();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            perms.set_mode(0o644);
+        }
+        #[cfg(not(unix))]
+        perms.set_readonly(false);
+        let _ = std::fs::set_permissions(&dest, perms);
+    }
+    println!("MEGA65 ROM installed: {}", dest.display());
+    report_rom_capability(&dest);
+    Ok(())
+}
+
+/// A closed-ROM stamps `V` + a 6-digit version at offset $16 — the same probe
+/// Xemu uses (`targets/mega65/rom.c` checks 0x56 at 0x16). Returns e.g. 910814
+/// for the stock C65 ROM, 920422 for a patched MEGA65 one.
+fn rom_version(path: &Path) -> Option<u32> {
+    let bytes = std::fs::read(path).ok()?;
+    let tag = bytes.get(0x16..0x1d)?;
+    if tag[0] != b'V' {
+        return None;
+    }
+    std::str::from_utf8(&tag[1..]).ok()?.parse().ok()
+}
+
+/// Tell the user whether the installed ROM can actually run MEGA65 programs.
+///
+/// The stock C65 ROM (91xxxx) boots Xemu but is a plain C65: llvm-mos's MEGA65
+/// startup assumes a MEGA65 memory environment, so programs crash immediately.
+/// Running code needs the MEGA65 project's enhanced closed-ROM (92xxxx+), which
+/// is owner-licensed and cannot be installed automatically.
+fn report_rom_capability(path: &Path) {
+    match rom_version(path) {
+        Some(v) if v >= 920000 => {
+            println!("  MEGA65 closed-ROM v{v} — `cargo xrun_mega65` will run programs.");
+        }
+        other => {
+            let what = match other {
+                Some(v) => format!("the stock C65 ROM (v{v})"),
+                None => "an unrecognised ROM".to_string(),
+            };
+            println!();
+            println!("NOTE: this is {what}. Xemu starts, but your MEGA65 programs may crash.");
+            println!("      To run them, patch this ROM to a MEGA65 ROM (v920422+) and save it over");
+            println!("      {}", path.display());
+            println!("      How:   https://retrocombs.com/patch-c65-rom");
+            println!("      Tools: https://files.mega65.org  (M65Connect + the .BDF diff)");
+        }
+    }
 }
 
 fn intel_mac_message() -> String {

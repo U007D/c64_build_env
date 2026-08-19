@@ -2,6 +2,15 @@ result
 result-*
 # nix build GC-root symlinks the publish-toolchain-binaries xtask drops in toolchain/
 toolchain/gcroot-*
+
+# The C65 ROM xmega65 boots is Cloanto copyright: free to download for your own
+# use, NOT redistributable. toolchain/mega65-rom.nix fetches it to your local
+# /nix/store and initenv copies it to your Xemu preferences directory — it is
+# never meant to live here. Named exactly so a stray copy cannot be committed by
+# accident. (Same reason mega65-rom is absent from CACHE_ATTRS in
+# xtask/src/publish_toolchain_binaries.rs — pushing it would be redistribution.)
+c-65-19910828.rom
+MEGA65.ROM
 target/
 *.bak
 **/.idea

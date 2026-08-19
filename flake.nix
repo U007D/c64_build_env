@@ -40,6 +40,14 @@
             rust-mos-src = call ./toolchain/rust-mos-src.nix { };
             rust-mos = call ./toolchain/rust-mos.nix { };
             check-vendor = call ./toolchain/check-vendor.nix { };
+            # LGB's Xemu (xmega65) — the MEGA65 emulator behind `cargo xrun_mega65`.
+            # Built from source because neither nixpkgs nor Homebrew packages it
+            # (both ship an unrelated Xbox emulator under the name `xemu`).
+            xemu = call ./toolchain/xemu.nix { };
+            # The C65 ROM xmega65 boots, extracted from Cloanto's free C64
+            # Forever installer. UNFREE — see the licensing header in the file;
+            # in particular it must never be pushed to the public Cachix cache.
+            mega65-rom = call ./toolchain/mega65-rom.nix { };
           };
         in
         {
@@ -48,6 +56,8 @@
             llvm-mos-sdk
             mos-toolchain
             rust-mos
+            xemu
+            mega65-rom
             ;
           default = toolchain.rust-mos;
 
@@ -93,33 +103,40 @@
           # resolves `--manifest-path` against the cwd, so it only works from the
           # repo root). cargo may pass the subcommand name through as the first
           # arg; drop a leading "xasm", then defer to xtask's asm subcommand.
-          cargo-xasm = pkgs.writeShellScriptBin "cargo-xasm" ''
-            [ "''${1:-}" = "xasm" ] && shift
-            exec ${xtask}/bin/xtask asm "$@"
-          '';
+          #
+          # One shim per verb, bare-named only. The per-machine forms are cargo
+          # aliases in .cargo/config.toml (`xbuild_mega65` etc.) — there are no
+          # `_c64`/`_mega65` shims, because an alias and a same-named
+          # `cargo-<name>` on PATH collide ("user-defined alias is shadowing an
+          # external subcommand", slated to become a hard error).
+          #
+          # Each shim appends `--target c64`, which xtask requires and which
+          # makes the C64 the default. A user-supplied `--target` still wins:
+          # it appears later in argv, and xtask takes the last one. So
+          # `cargo xbuild` builds for the C64 and `cargo xbuild --target mega65`
+          # works from any crate directory.
+          mkShim =
+            verb:
+            pkgs.writeShellScriptBin "cargo-x${verb}" ''
+              [ "''${1:-}" = "x${verb}" ] && shift
+              exec ${xtask}/bin/xtask ${verb} --target c64 "$@"
+            '';
 
-          # `cargo xrun` — build the current C64 crate in release and launch it in
-          # VICE (release: a debug build usually won't fit in RAM). Same PATH-shim
-          # trick as cargo-xasm, for the same reason (the `cargo xtask` alias is
-          # repo-root-only). Runs `xtask run`, which shells out to `cargo run --release`.
-          cargo-xrun = pkgs.writeShellScriptBin "cargo-xrun" ''
-            [ "''${1:-}" = "xrun" ] && shift
-            exec ${xtask}/bin/xtask run "$@"
-          '';
+          # `cargo xasm` — dump the generated assembly.
+          cargo-xasm = mkShim "asm";
 
-          # `cargo xbuild` / `cargo xcheck` — cross-compile / type-check the current
-          # C64 crate. Same PATH-shim trick as cargo-xasm. Each runs `xtask build`/
-          # `xtask check`, which pass `--target mos-c64-none -Zbuild-std=…` explicitly
-          # (the repo's `.cargo/config.toml` no longer sets a default mos target, so
-          # `cargo xtask` itself builds for the host — see .cargo/config.toml).
-          cargo-xbuild = pkgs.writeShellScriptBin "cargo-xbuild" ''
-            [ "''${1:-}" = "xbuild" ] && shift
-            exec ${xtask}/bin/xtask build "$@"
-          '';
-          cargo-xcheck = pkgs.writeShellScriptBin "cargo-xcheck" ''
-            [ "''${1:-}" = "xcheck" ] && shift
-            exec ${xtask}/bin/xtask check "$@"
-          '';
+          # `cargo xrun` — build in release and launch the emulator (release: a
+          # debug build usually won't fit in the machine's RAM). The emulator
+          # comes from the crate's `[target.<triple>] runner`: VICE (x64sc) for
+          # the C64, Xemu (xmega65) for the MEGA65.
+          cargo-xrun = mkShim "run";
+
+          # `cargo xbuild` / `cargo xcheck` — cross-compile / type-check. Each
+          # passes `--target <triple> -Zbuild-std=…` explicitly (the repo's
+          # `.cargo/config.toml` sets no default mos target, so `cargo xtask`
+          # itself builds for the host — see .cargo/config.toml).
+          cargo-xbuild = mkShim "build";
+          cargo-xcheck = mkShim "check";
 
           # Repo automation, same PATH-shim trick so they run from any directory in
           # the shell (not just the repo root the `cargo xtask` alias is limited to).
@@ -140,6 +157,11 @@
             packages = [
               p.rust-mos
               p.mos-toolchain
+              # Xemu (xmega65) backs `cargo xrun_mega65`. Built from source by
+              # this flake on every platform — unlike VICE below, there is no
+              # distro/brew package to defer to (the `xemu` in nixpkgs and
+              # Homebrew is an unrelated Xbox emulator).
+              p.xemu
               cargo-xasm
               cargo-xrun
               cargo-xbuild
@@ -154,7 +176,11 @@
             # README); on Linux the dev shell provides it.
             ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.vice ];
 
-            RUST_TARGET_PATH = "${p.rust-mos}/targets";
+            # Two entries: rust-mos ships mos-c64-none (plus a800xl/sim), while
+            # mos-mega65-none is this repo's own JSON. rustc searches the list in
+            # order. NOTE: flakes only see git-tracked files, so a new target JSON
+            # must be `git add`ed or it silently won't resolve.
+            RUST_TARGET_PATH = "${p.rust-mos}/targets:${./targets}";
             RUST_SRC_PATH = "${p.rust-mos}/lib/rustlib/src/rust/library";
 
             shellHook = ''
@@ -211,10 +237,12 @@
               echo "rust-mos $(rustc --version 2>/dev/null) | targets: $RUST_TARGET_PATH"
               printf '  %-33s  %s\n' \
                 "cargo xbuild"                     "build the .prg   (plain 'cargo build' targets the host)" \
-                "cargo xrun"                       "build, then launch in VICE" \
+                "cargo xrun"                       "build, then launch the emulator" \
                 "cargo xcheck"                     "type-check" \
                 "cargo xasm"                       "show the mos assembly" \
                 "cargo xpublish-toolchain-binaries" "push the toolchain to Cachix"
+              echo "  each build command takes _c64 (default) or _mega65, e.g. cargo xrun_mega65"
+              echo "  c64 -> mos-c64-none, VICE (x64sc) | mega65 -> mos-mega65-none, Xemu (xmega65)"
             '';
           };
         }

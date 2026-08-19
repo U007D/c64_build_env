@@ -8,13 +8,21 @@ use std::fs;
 use std::process::{Command, ExitCode};
 
 pub const HELP: &str = "\
-cargo xasm [FUNCTION]           (also: cargo xtask asm)
+cargo xasm --target <TARGET> [FUNCTION]         (also: cargo xtask asm)
 
 Show the mos assembly for the crate in the current directory. Compiles it with
 `--emit asm`, passing the mos target + build-std explicitly, then prints the
 emitted `.s` — the whole crate, or, with FUNCTION, only the functions whose
 symbol contains that text (substring match). Runs `cargo rustc`, so run it
-inside `nix develop`, from a C64 crate.
+inside `nix develop`, from a C64/MEGA65 crate.
+
+targets:
+  c64     Commodore 64 — 6502 assembly (mos-c64-none)
+  mega65  MEGA65 — 45GS02 assembly (mos-mega65-none)
+
+--target is required; there is no default, because the two machines compile to
+different instruction sets. Shorthand aliases (repo root): cargo xasm_c64,
+cargo xasm_mega65; plain `cargo xasm` is the same as cargo xasm_c64.
 ";
 
 struct AsmOpts {
@@ -35,7 +43,13 @@ fn parse_asm_args(args: &[String]) -> Result<AsmOpts, String> {
 }
 
 pub fn run(args: &[String]) -> ExitCode {
-    match asm_inner(args) {
+    // `--target` is pulled out first so the positional FUNCTION parser below
+    // never sees it (it rejects anything starting with `--`).
+    let (target, rest) = match crate::target::split_or_usage(args, "asm") {
+        Ok(v) => v,
+        Err(code) => return code,
+    };
+    match asm_inner(target, &rest) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("ERROR [asm]: {e}");
@@ -44,20 +58,26 @@ pub fn run(args: &[String]) -> ExitCode {
     }
 }
 
-fn asm_inner(args: &[String]) -> Result<(), String> {
+fn asm_inner(target: crate::target::Target, args: &[String]) -> Result<(), String> {
     let opts = parse_asm_args(args)?;
 
     // Emit assembly for the crate in the current directory. The mos target +
-    // build-std are passed explicitly (crate::MOS_FLAGS), not inherited from
-    // `.cargo/config.toml`, so this must run inside `nix develop`, from a C64
-    // crate. `--emit=asm=<path>` pins the output so we don't have to know the
-    // target triple; `-Ccodegen-units=1` keeps the whole crate in that one file.
-    // Both are rustc flags, so they go after `--` and apply only to this crate.
-    let out = std::env::temp_dir().join(format!("cargo-xasm-{}.s", std::process::id()));
+    // build-std are passed explicitly (Target::cargo_flags), not inherited from
+    // `.cargo/config.toml`, so this must run inside `nix develop`, from a
+    // C64/MEGA65 crate. `--emit=asm=<path>` pins the output so we don't have to
+    // know the target triple; `-Ccodegen-units=1` keeps the whole crate in that
+    // one file. Both are rustc flags, so they go after `--` and apply only to
+    // this crate. The temp filename carries the target so two concurrent runs
+    // for different machines can't clobber each other.
+    let out = std::env::temp_dir().join(format!(
+        "cargo-xasm-{}-{}.s",
+        target.name(),
+        std::process::id()
+    ));
     let emit = format!("--emit=asm={}", out.to_string_lossy());
     let status = Command::new("cargo")
         .args(["rustc", "--release"])
-        .args(crate::MOS_FLAGS)
+        .args(target.cargo_flags())
         .args(["--", "-Ccodegen-units=1", &emit])
         .status()
         .map_err(|e| {

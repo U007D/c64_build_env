@@ -23,10 +23,16 @@ flake.nix so consumers are offered it automatically.
 /// puts the resulting GC root at an explanatory path under `toolchain/` instead
 /// of nix's default `result`/`result-N` in the repo root. `toolchain/gcroot-*`
 /// is gitignored.
-const CACHE_ATTRS: [(&str, &str); 3] = [
+const CACHE_ATTRS: [(&str, &str); 4] = [
     (".#llvm-mos", "toolchain/gcroot-llvm-mos"),
     (".#llvm-mos-sdk", "toolchain/gcroot-llvm-mos-sdk"),
     (".#rust-mos", "toolchain/gcroot-rust-mos"),
+    // Xemu is GPL-2.0+, so caching it is fine and saves every consumer a build.
+    (".#xemu", "toolchain/gcroot-xemu"),
+    // DO NOT add `.#mega65-rom` here. It contains Cloanto's copyrighted C65 ROM,
+    // which is free to download for your own use but NOT redistributable —
+    // pushing it to a public cache would be redistribution. See
+    // toolchain/mega65-rom.nix.
 ];
 
 /// The commented cache block shipped in flake.nix, filled in by `--public-key`.

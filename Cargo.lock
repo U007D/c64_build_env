@@ -9,15 +9,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
-name = "c64_dev_env"
-version = "0.1.0"
-dependencies = [
- "c64_pac",
- "critical-section",
- "ufmt-stdio",
-]
-
-[[package]]
 name = "c64_pac"
 version = "0.1.0"
 source = "git+https://github.com/u007d/c64_pac#fcef2a9fae635035816ce2e209f3795362d12f62"
@@ -66,6 +57,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001"
 dependencies = [
  "proc-macro2",
+]
+
+[[package]]
+name = "rust-mos-env"
+version = "0.1.0"
+dependencies = [
+ "c64_pac",
+ "critical-section",
+ "ufmt-stdio",
 ]
 
 [[package]]

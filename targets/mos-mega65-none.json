@@ -1,0 +1,37 @@
+{
+  "arch": "mos",
+  "atomic-cas": false,
+  "cpu": "mos45gs02",
+  "crt-objects-fallback": "false",
+  "data-layout": "e-m:e-p:16:8-p1:8:8-i16:8-i32:8-i64:8-f32:8-f64:8-a:8-Fi8-n8",
+  "disable-redzone": true,
+  "linker": "mos-mega65-clang",
+  "linker-flavor": "gnu-cc",
+  "llvm-args": [
+    "--force-precise-rotation-cost",
+    "--jump-inst-cost=6",
+    "--force-loop-cold-block",
+    "--phi-node-folding-threshold=0",
+    "--two-entry-phi-node-folding-threshold=0",
+    "--align-large-globals=false",
+    "--disable-spill-hoist"
+  ],
+  "llvm-target": "mos-unknown-none",
+  "max-atomic-width": 8,
+  "metadata": {
+    "description": "MEGA65 (45GS02)",
+    "host_tools": false,
+    "std": false,
+    "tier": 3
+  },
+  "min-atomic-width": 8,
+  "no-default-libraries": false,
+  "panic-strategy": "abort",
+  "requires-lto": true,
+  "singlethread": true,
+  "supports-stack-protector": false,
+  "target-c-int-width": "16",
+  "target-pointer-width": "16",
+  "trap-unreachable": false,
+  "vendor": "mega65"
+}

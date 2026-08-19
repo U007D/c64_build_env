@@ -2,17 +2,43 @@ use std::{env, fs, path::PathBuf};
 
 type Result<T, E = Box<dyn core::error::Error>> = core::result::Result<T, E>;
 
-fn main() -> Result<()> {
-    let out = PathBuf::from(env::var("OUT_DIR")?);
+/// The linker script is per-machine: the C64 pins `.font`/`.music` to fixed
+/// addresses that are invalid on the MEGA65 (whose PRG loads at $2001, inside
+/// the C64's `.font` placement). Pick the right one from the target vendor —
+/// `"c64"` / `"mega65"` in targets/mos-*-none.json — and stage it under the
+/// single name the link arg names, so the `-Tmemory.x` below never has to vary.
+fn memory_script(vendor: &str) -> Result<&'static str> {
+    match vendor {
+        "c64" => Ok("memory-c64.x"),
+        "mega65" => Ok("memory-mega65.x"),
+        other => Err(format!(
+            "no linker script for mos target vendor '{other}'; add memory-{other}.x and a match arm here"
+        )
+        .into()),
+    }
+}
 
-    fs::copy("memory.x", out.join("memory.x"))?;
+fn main() -> Result<()> {
+    // Rerun when any input changes, regardless of which one today's target picks.
+    println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=memory-c64.x");
+    println!("cargo:rerun-if-changed=memory-mega65.x");
+
+    // Only the bare-metal mos targets get a linker script. Host builds (the
+    // xtask helper, `cargo test`) must not have `-Tmemory.x` forced on them —
+    // it isn't even a valid flag for the host linker.
+    if env::var("CARGO_CFG_TARGET_ARCH").as_deref() != Ok("mos") {
+        return Ok(());
+    }
+
+    let vendor = env::var("CARGO_CFG_TARGET_VENDOR")?;
+    let script = memory_script(&vendor)?;
+
+    let out = PathBuf::from(env::var("OUT_DIR")?);
+    fs::copy(script, out.join("memory.x"))?;
 
     println!("cargo:rustc-link-search={}", out.display());
-
     println!("cargo:rustc-link-arg-bins=-Tmemory.x");
-
-    println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=memory.x");
 
     Ok(())
 }

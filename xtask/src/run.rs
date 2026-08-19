@@ -1,27 +1,43 @@
 //! `run` — build the crate in the current directory in release and launch it in
-//! the VICE emulator. Normally invoked as `cargo xrun` (the dev shell exposes it
-//! on PATH so it works from any crate directory; the `cargo xtask` alias is
-//! repo-root-only).
+//! the emulator for the machine named by `--target`: VICE (`x64sc`) for the C64,
+//! Xemu (`xmega65`) for the MEGA65. Normally invoked as `cargo xrun_c64` /
+//! `cargo xrun_mega65` (or `cargo xrun`, which is `_c64`); the dev shell exposes
+//! these on PATH so they work from any crate directory, while the `cargo xtask`
+//! alias is repo-root-only.
 
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, ExitCode, Stdio};
 
+use crate::target::Target;
+
 pub const HELP: &str = "\
-cargo xrun [CARGO ARGS…]        (also: cargo xtask run)
+cargo xrun --target <TARGET> [CARGO ARGS…]      (also: cargo xtask run)
 
-Build the crate in the current directory in release and launch it in VICE.
-Release by default: a debug C64 build usually won't fit in the machine's RAM.
-Runs `cargo run --release` with the mos target + build-std passed explicitly
-(so it doesn't depend on .cargo/config.toml); the x64sc runner still comes from
-the crate's `[target.mos-c64-none] runner`. Run it inside `nix develop`, from a
-C64 crate; extra args are forwarded to cargo.
+Build the crate in the current directory in release and launch it in its
+emulator. Release by default: a debug build usually won't fit in the machine's
+RAM. Runs `cargo run --release` with the mos target + build-std passed
+explicitly (so it doesn't depend on .cargo/config.toml); the emulator itself
+still comes from that crate's `[target.<triple>] runner`. Run it inside
+`nix develop`, from a C64/MEGA65 crate; extra args are forwarded to cargo.
 
-VICE's benign 'failed to retrieve executable path' line (Homebrew macOS, printed
-to stdout during arch-init) is filtered from the output.
+targets:
+  c64     Commodore 64 — launches VICE (x64sc -autostart)
+  mega65  MEGA65 — launches Xemu (xmega65 -prg)
+
+--target is required; there is no default, because the two machines produce
+incompatible binaries. Shorthand aliases (repo root): cargo xrun_c64,
+cargo xrun_mega65; plain `cargo xrun` is the same as cargo xrun_c64.
+
+For the C64, VICE's benign 'failed to retrieve executable path' line (Homebrew
+macOS, printed to stdout during arch-init) is filtered from the output.
 ";
 
 pub fn run(args: &[String]) -> ExitCode {
-    match run_inner(args) {
+    let (target, cargo_args) = match crate::target::split_or_usage(args, "run") {
+        Ok(v) => v,
+        Err(code) => return code,
+    };
+    match run_inner(target, &cargo_args) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("ERROR [run]: {e}");
@@ -30,45 +46,58 @@ pub fn run(args: &[String]) -> ExitCode {
     }
 }
 
-fn run_inner(args: &[String]) -> Result<(), String> {
-    // Build in release and launch it. Release by default because a debug C64
-    // build usually won't fit in the machine's RAM. The mos target + build-std
-    // are passed explicitly (crate::MOS_FLAGS), not inherited from
-    // `.cargo/config.toml`; the x64sc runner still comes from that config's
-    // `[target.mos-c64-none] runner` (inert for host builds). Run it inside
-    // `nix develop`, from a C64 crate. Extra args are forwarded verbatim to cargo.
-    //
-    // We pipe the child's *stdout* so we can drop VICE's benign arch-init noise
-    // (see is_vice_arch_noise). cargo writes its build progress and real errors
-    // to *stderr*, which we leave inherited — so filtering stdout touches only
-    // the x64sc runner's output, never cargo's.
-    let mut child = Command::new("cargo")
-        .args(["run", "--release"])
-        .args(crate::MOS_FLAGS)
-        .args(args)
-        .stdout(Stdio::piped())
-        .spawn()
-        .map_err(|e| {
-            format!("failed to spawn `cargo`: {e} (run this inside `nix develop`, from a C64 crate)")
-        })?;
+fn run_inner(target: Target, args: &[String]) -> Result<(), String> {
+    // Build in release and launch it. Release by default because a debug build
+    // usually won't fit in the machine's RAM. The mos target + build-std are
+    // passed explicitly (Target::cargo_flags), not inherited from
+    // `.cargo/config.toml`; the emulator still comes from that config's
+    // `[target.<triple>] runner` (inert for host builds). Run it inside
+    // `nix develop`. Extra args are forwarded verbatim to cargo.
+    let mut cmd = Command::new("cargo");
+    cmd.args(["run", "--release"])
+        .args(target.cargo_flags())
+        .args(args);
 
-    let stdout = child.stdout.take().expect("child stdout was set to piped");
-    let mut out = std::io::stdout();
-    for line in BufReader::new(stdout).lines() {
-        let line = line.map_err(|e| format!("reading runner stdout: {e}"))?;
-        if is_vice_arch_noise(&line) {
-            continue;
+    // Only the C64 path needs stdout piped: that filtering exists solely to drop
+    // VICE's benign arch-init noise (see is_vice_arch_noise). Xemu has no such
+    // quirk, so its stdout stays inherited and untouched. cargo writes its build
+    // progress and real errors to *stderr*, which is inherited either way — so
+    // filtering touches only the x64sc runner's output, never cargo's.
+    let status = match target {
+        Target::Mega65 => cmd
+            .status()
+            .map_err(|e| spawn_err(e.to_string()))?,
+        Target::C64 => {
+            let mut child = cmd
+                .stdout(Stdio::piped())
+                .spawn()
+                .map_err(|e| spawn_err(e.to_string()))?;
+            let stdout = child.stdout.take().expect("child stdout was set to piped");
+            let mut out = std::io::stdout();
+            for line in BufReader::new(stdout).lines() {
+                let line = line.map_err(|e| format!("reading runner stdout: {e}"))?;
+                if is_vice_arch_noise(&line) {
+                    continue;
+                }
+                writeln!(out, "{line}").map_err(|e| format!("writing to stdout: {e}"))?;
+            }
+            child
+                .wait()
+                .map_err(|e| format!("waiting for `cargo run`: {e}"))?
         }
-        writeln!(out, "{line}").map_err(|e| format!("writing to stdout: {e}"))?;
-    }
+    };
 
-    let status = child
-        .wait()
-        .map_err(|e| format!("waiting for `cargo run`: {e}"))?;
     if !status.success() {
-        return Err("`cargo run --release` for mos-c64-none failed (see cargo output above)".into());
+        return Err(format!(
+            "`cargo run --release` for {} failed (see cargo output above)",
+            target.triple()
+        ));
     }
     Ok(())
+}
+
+fn spawn_err(e: String) -> String {
+    format!("failed to spawn `cargo`: {e} (run this inside `nix develop`, from a C64/MEGA65 crate)")
 }
 
 /// True for VICE's benign "can't locate my own executable" messages, which
@@ -92,8 +121,8 @@ fn run_inner(args: &[String]) -> Result<(), String> {
 ///
 /// REMOVE THIS once a fixed VICE stable ships (VICE `main` already sizes the
 /// buffer to 4096; no stable release has it yet, and none newer than 3.10 exists
-/// in Homebrew). Then `brew upgrade vice`, delete this predicate, and restore
-/// `run_inner` to a plain inherited-stdout `.status()` call.
+/// in Homebrew). Then `brew upgrade vice`, delete this predicate, and drop the
+/// `Target::C64` arm's piped-stdout branch in `run_inner` for a plain `.status()`.
 fn is_vice_arch_noise(line: &str) -> bool {
     let l = line.trim();
     l.contains("failed to retrieve executable path")

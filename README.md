@@ -19,6 +19,50 @@ other 6502-based targets.
 8. A Commodore 64 "Hello, 16-bit world, from Rust!" application will run and appear in an emulator.
 9. Happy programming!
 
+## Targets: `c64` and `mega65`
+
+Every build command takes a machine suffix; the bare form is the C64.
+
+```sh
+cargo xbuild_c64 --release   # 6502   -> target/mos-c64-none/…      runs in VICE (x64sc)
+cargo xbuild_mega65          # 45GS02 -> target/mos-mega65-none/…   runs in Xemu (xmega65)
+cargo xrun_mega65            # build + launch Xemu
+```
+
+`_c64`, `_mega65`, and the bare default exist for `xbuild`, `xrun`, `xcheck`, and `xasm`. Each is
+`cargo xtask <cmd> --target c64|mega65`; **`--target` is required** there, since the two machines
+have different CPUs, linkers, and emulators. Calling `cargo xtask build` with no (or an unknown)
+target prints the valid list.
+
+The MEGA65 target is `targets/mos-mega65-none.json` — the dev shell appends it to
+`RUST_TARGET_PATH`. Nix flakes only see git-tracked files, so it must stay committed. Linker
+scripts are per-machine too: `build.rs` picks `memory-c64.x` or `memory-mega65.x` from the target
+vendor, because a MEGA65 PRG loads at `$2001` and collides with anything the C64 pins at `$2000`.
+
+### MEGA65 ROM
+
+`xmega65` needs a C65 ROM to boot, and **`cargo xinitenv` installs it automatically**. Nothing to
+do by hand unless you want a different ROM or that step reported an error.
+
+It fetches Cloanto's free *C64 Forever* installer, extracts C65 ROM `910828`, and copies it to
+Xemu's preferences directory as `MEGA65.ROM` — `~/Library/Application Support/xemu-lgb/mega65/`
+on macOS, `~/.local/share/xemu-lgb/mega65/` on Linux. The ROM is Cloanto copyright: free to
+download for your own use, **not redistributable**, so it never enters this repo or the Cachix
+cache.
+
+**That ROM boots, but SDK-built MEGA65 programs will not run on it.** It is a plain C65 — the
+banner reads *"THE COMMODORE C64DX DEVELOPMENT SYSTEM, BASIC 10.0"* — and llvm-mos's MEGA65
+startup assumes a MEGA65 memory environment, so programs crash immediately (Xemu reports
+execution ending in zero page).
+
+To actually run code you need the MEGA65 project's **enhanced closed-ROM** (v920422 or later),
+made by patching the C65 ROM with a `.BDF` diff using M65Connect, both from
+[files.mega65.org](https://files.mega65.org). It is licensed to MEGA65/C65 owners only, so
+`xinitenv` does not attempt it — patch it yourself and copy the result over `MEGA65.ROM` at the
+path above. `xinitenv` leaves an existing `MEGA65.ROM` alone, so it survives re-runs; delete it
+to fall back to the Cloanto one. Verify with Xemu's log: `Closed-ROMs detected with version
+920422` means you have the enhanced ROM, `910814` means you do not.
+
 Note all documented C64 registers are defined in a Peripheral Access Crate (PAC)--a hierarchy of 
 modules found starting at `src/c64_pac.rs`.
 The register/field names in the PAC are consistent with *Compute!'s Mapping the C64*.  An online 

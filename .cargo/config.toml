@@ -19,13 +19,29 @@ xinitenv = "xtask initenv"
 # Cachix cache so others download instead of rebuilding (cache-owner, one-time).
 xpublish-toolchain-binaries = "xtask publish-toolchain-binaries"
 
-# The C64 build/run/check/asm commands (`cargo xbuild`, `cargo xrun`,
+# The bare build/run/check/asm commands (`cargo xbuild`, `cargo xrun`,
 # `cargo xcheck`, `cargo xasm`) are NOT cargo aliases: the dev shell puts
 # `cargo-x*` binaries on PATH (see flake.nix) so they work from any crate
 # directory, and each shells out to cargo with the mos `--target` + `-Zbuild-std`
 # flags spelled out explicitly (so nothing mos-flavored is inherited from this
-# config). The `cargo xtask build/run/check/asm` alias forms work from the repo
-# root too.
+# config). They default to `--target c64`. The `cargo xtask build/run/check/asm`
+# alias forms work from the repo root too.
+#
+# Defining a bare `xbuild`/`xrun`/… alias here as well would shadow that shim,
+# which cargo warns about today and will reject in a future release.
+
+# Per-machine build commands. xtask requires `--target c64|mega65` (the two
+# machines have different CPUs, linkers and emulators, so there is no safe
+# default); these aliases spell it out so you don't have to. Repo-root-only, as
+# all cargo aliases are — an alias resolves `--manifest-path` against the cwd.
+xbuild_c64 = "xtask build --target c64"
+xbuild_mega65 = "xtask build --target mega65"
+xrun_c64 = "xtask run --target c64"
+xrun_mega65 = "xtask run --target mega65"
+xcheck_c64 = "xtask check --target c64"
+xcheck_mega65 = "xtask check --target mega65"
+xasm_c64 = "xtask asm --target c64"
+xasm_mega65 = "xtask asm --target mega65"
 
 # mos-c64-none runner: launches the built PRG in VICE for `cargo xrun` (and any
 # `cargo run --target mos-c64-none`). A runner keyed to the mos triple is inert
@@ -34,3 +50,12 @@ xpublish-toolchain-binaries = "xtask publish-toolchain-binaries"
 # silences VICE's noisy startup log.
 [target.mos-c64-none]
 runner = ["x64sc", "-loglimit", "0", "-autostart"]
+
+# mos-mega65-none runner: launches the built PRG in Xemu for `cargo xrun_mega65`
+# (and any `cargo run --target mos-mega65-none`). Like the x64sc entry above, a
+# runner keyed to a mos triple is inert for host builds, so it is safe here.
+# xmega65 is LGB's Xemu (github.com/lgblgblgb/xemu) — NOT the identically named
+# Xbox emulator in Homebrew/nixpkgs. `-prg` loads a PRG straight into memory and
+# auto-detects C64 vs C65 mode from its load address.
+[target.mos-mega65-none]
+runner = ["xmega65", "-prg"]

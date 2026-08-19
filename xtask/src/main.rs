@@ -15,21 +15,14 @@ mod initenv;
 mod prefetch;
 mod publish_toolchain_binaries;
 mod run;
+mod target;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 
-/// Cross-compile flags that target the C64 (mos-c64-none). Passed explicitly on
-/// every game build so xtask does not depend on an ancestor `.cargo/config.toml`
-/// default — cargo discovers config by cwd, so such a default would also leak
-/// onto this host tool and break `cargo xtask`. `-Zbuild-std` needs the forked
-/// nightly cargo, so the build/run/check/asm commands must run inside `nix develop`.
-pub(crate) const MOS_FLAGS: &[&str] = &[
-    "--target",
-    "mos-c64-none",
-    "-Zbuild-std=core,alloc",
-    "-Zbuild-std-features=panic_immediate_abort",
-];
+// The per-machine cross-compile flags that used to live here now come from
+// `target::Target::cargo_flags()`, since build/check/run/asm each select a
+// machine with a required `--target c64|mega65`.
 
 // ---------------------------------------------------------------------------
 // dispatch
@@ -71,19 +64,19 @@ const COMMANDS: &[Cmd] = &[
     },
     Cmd {
         name: "run",
-        summary: "build the current crate in release and launch it in VICE",
+        summary: "build the current crate in release and launch it in its emulator",
         help: run::HELP,
         run: run::run,
     },
     Cmd {
         name: "build",
-        summary: "cross-compile the current crate for the C64 (mos-c64-none)",
+        summary: "cross-compile the current crate for --target c64|mega65",
         help: build::HELP,
         run: build::run,
     },
     Cmd {
         name: "check",
-        summary: "type-check the current crate for the C64 (mos-c64-none)",
+        summary: "type-check the current crate for --target c64|mega65",
         help: check::HELP,
         run: check::run,
     },
