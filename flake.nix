@@ -181,6 +181,20 @@
             # order. NOTE: flakes only see git-tracked files, so a new target JSON
             # must be `git add`ed or it silently won't resolve.
             RUST_TARGET_PATH = "${p.rust-mos}/targets:${./targets}";
+
+            # Identifies the flake this shell was built from. Everything the
+            # shell exports (RUST_TARGET_PATH, PATH, the cargo-x* shims) is fixed
+            # at entry, so editing flake.nix has no effect on an already-running
+            # shell — a confusing failure, since the symptom is usually a
+            # "target not found" error rather than anything pointing at the env.
+            # xtask compares this to the files on disk and warns. Cheap: two file
+            # hashes, no flake re-evaluation.
+            XTASK_DEVSHELL_STAMP = "${builtins.hashFile "sha256" ./flake.nix}:${
+              if builtins.pathExists ./flake.lock then
+                builtins.hashFile "sha256" ./flake.lock
+              else
+                "nolock"
+            }";
             RUST_SRC_PATH = "${p.rust-mos}/lib/rustlib/src/rust/library";
 
             shellHook = ''

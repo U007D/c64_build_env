@@ -105,6 +105,13 @@ pub(crate) fn split_or_usage(
     args: &[String],
     command: &str,
 ) -> Result<(Target, Vec<String>), ExitCode> {
+    // Every cross-compile command funnels through here, so it is the one place
+    // to check the dev shell. A missing shell is fatal (nothing can work); a
+    // stale one only warns.
+    if let Err(e) = crate::devshell::check() {
+        eprintln!("ERROR [{command}]: {e}");
+        return Err(ExitCode::FAILURE);
+    }
     match split(args) {
         Ok(v) => Ok(v),
         Err(e) => {

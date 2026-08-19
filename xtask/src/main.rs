@@ -11,6 +11,7 @@
 mod asm;
 mod build;
 mod check;
+mod devshell;
 mod initenv;
 mod prefetch;
 mod publish_toolchain_binaries;

@@ -61,7 +61,7 @@ dependencies = [
 
 [[package]]
 name = "rust-mos-env"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "c64_pac",
  "critical-section",
